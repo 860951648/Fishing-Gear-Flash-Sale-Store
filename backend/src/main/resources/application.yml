@@ -1,0 +1,96 @@
+server:
+  port: 8080
+  servlet:
+    encoding:
+      charset: UTF-8
+      force: true
+
+spring:
+  application:
+    name: trade
+
+  # ---------- MySQL ----------
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/trade_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 20
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  # ---------- Redis ----------
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      database: 0
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+          max-wait: 3000ms
+
+  # ---------- RabbitMQ（app.mq.enabled=false 时不会建立连接） ----------
+  rabbitmq:
+    host: ${RABBIT_HOST:localhost}
+    port: ${RABBIT_PORT:5672}
+    username: ${RABBIT_USERNAME:guest}
+    password: ${RABBIT_PASSWORD:guest}
+    connection-timeout: 3000ms
+    listener:
+      simple:
+        # 手动 ACK：消费失败不丢消息，配合 t_mq_consume_log 幂等
+        acknowledge-mode: manual
+        prefetch: 10
+        concurrency: 1
+        max-concurrency: 3
+
+  jackson:
+    default-property-inclusion: non_null
+
+# ---------- MyBatis-Plus ----------
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.pyh.trade.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    default-executor-type: reuse
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# ---------- 业务配置 ----------
+app:
+  jwt:
+    # 生产环境必须用环境变量覆盖；HS256 要求至少 32 字节
+    secret: ${JWT_SECRET:dev-jwt-secret-at-least-32-bytes-long!!}
+    expire-minutes: ${JWT_EXPIRE_MINUTES:120}
+  pay:
+    # 支付回调签名密钥（HMAC-SHA256）
+    secret: ${PAY_SECRET:dev-pay-secret}
+    # 回调时间戳允许的偏差（秒），防重放
+    timestamp-tolerance-seconds: 300
+  mq:
+    # 本机未装 RabbitMQ，默认 false：不声明队列、不启动消费者，关单由 @Scheduled 兜底
+    enabled: ${MQ_ENABLED:false}
+    delay-minutes: 30
+
+logging:
+  level:
+    root: info
+    com.pyh.trade: info
+    com.pyh.trade.mapper: debug
+    org.springframework.security: warn
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"

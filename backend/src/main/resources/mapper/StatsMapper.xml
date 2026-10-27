@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  运营看板聚合 SQL。
+  放 XML 而不是注解的原因：GROUP BY / DATE_FORMAT / COALESCE 用注解写会挤成一行很难维护。
+  所有参数都用 #{} 预编译，禁止 ${} 拼接。
+  口径说明：
+    - 销售额只统计「已支付及之后」的订单（status in 1,2,3,6 中的 1/2/3，退款中 5 不计入，已退款 6 不计入）
+    - 按 pay_time 归日，避免下单跨天导致销售额与订单数口径不一致
+-->
+<mapper namespace="com.pyh.trade.mapper.StatsMapper">
+
+    <!-- 时间窗内支付金额合计 -->
+    <select id="selectSalesAmount" resultType="java.math.BigDecimal">
+        SELECT COALESCE(SUM(pay_amount), 0)
+        FROM t_order
+        WHERE status IN (1, 2, 3)
+          AND pay_time &gt;= #{start}
+          AND pay_time &lt; #{end}
+    </select>
+
+    <!-- 时间窗内创建的订单数 -->
+    <select id="selectOrderCount" resultType="java.lang.Long">
+        SELECT COUNT(*)
+        FROM t_order
+        WHERE create_time &gt;= #{start}
+          AND create_time &lt; #{end}
+    </select>
+
+    <!-- 待审核退款单数量 -->
+    <select id="selectPendingRefundCount" resultType="java.lang.Long">
+        SELECT COUNT(*)
+        FROM t_refund
+        WHERE status = 0
+    </select>
+
+    <!-- 可用库存低于阈值的 SKU 数量 -->
+    <select id="selectStockWarnCount" resultType="java.lang.Long">
+        SELECT COUNT(*)
+        FROM t_stock
+        WHERE available &lt; #{threshold}
+    </select>
+
+    <!-- 按天统计销售额（最近 N 天，只返回有数据的日期，Java 层补零） -->
+    <select id="selectSalesTrend" resultType="com.pyh.trade.vo.SalesTrendVO">
+        SELECT DATE_FORMAT(pay_time, '%Y-%m-%d') AS date,
+               COALESCE(SUM(pay_amount), 0)      AS amount
+        FROM t_order
+        WHERE status IN (1, 2, 3)
+          AND pay_time &gt;= #{start}
+        GROUP BY DATE_FORMAT(pay_time, '%Y-%m-%d')
+        ORDER BY date ASC
+    </select>
+</mapper>
